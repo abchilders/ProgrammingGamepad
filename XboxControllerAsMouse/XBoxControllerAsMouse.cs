@@ -1,6 +1,11 @@
-﻿using System.Threading;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text; 
+using System.Threading;
 using WindowsInput;
 using SharpDX.XInput;
+using System.Web.Mvc;
 
 namespace XBoxAsMouse
 {
@@ -11,16 +16,18 @@ namespace XBoxAsMouse
 		private const int RefreshRate = 60;
 
 		private Timer _timer;
-		private Controller _controller;
+		private SharpDX.XInput.Controller _controller;
 		private IMouseSimulator _mouseSimulator;
+		private IKeyboardSimulator _keyboardSimulator;
 
 		private bool _wasADown;
 		private bool _wasBDown;
 
 		public XBoxControllerAsMouse()
 		{
-			_controller = new Controller(UserIndex.One);
+			_controller = new SharpDX.XInput.Controller(UserIndex.One);
 			_mouseSimulator = new InputSimulator().Mouse;
+			_keyboardSimulator = new InputSimulator().Keyboard; 
 			_timer = new Timer(obj => Update());
 		}
 
@@ -41,8 +48,9 @@ namespace XBoxAsMouse
 		private void RightButton(State state)
 		{
 			var isBDown = state.Gamepad.Buttons.HasFlag(GamepadButtonFlags.B);
-			if (isBDown && !_wasBDown) _mouseSimulator.RightButtonDown();
-			if (!isBDown && _wasBDown) _mouseSimulator.RightButtonUp();
+			//if (isBDown && !_wasBDown) _mouseSimulator.RightButtonDown();
+			//if (!isBDown && _wasBDown) _mouseSimulator.RightButtonUp();
+			if (isBDown && !_wasBDown) _keyboardSimulator.KeyPress(WindowsInput.Native.VirtualKeyCode.VK_B); 
 			_wasBDown = isBDown;
 		}
 

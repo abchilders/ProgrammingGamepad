@@ -47,7 +47,7 @@ public static class KeyOutputManager
         _keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.VK_C);
         _keyboard.KeyUp(WindowsInput.Native.VirtualKeyCode.LCONTROL);
     }
-    public static void LeftTriggerHeld()
+    public static void LeftTriggerHalfHeld()
     {
         _keyboard.KeyDown(WindowsInput.Native.VirtualKeyCode.LCONTROL);
         _keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.VK_X);

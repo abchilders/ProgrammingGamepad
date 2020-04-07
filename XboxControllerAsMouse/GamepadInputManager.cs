@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,6 +9,13 @@ using SharpDX.XInput;
 
 class InputControl
 {
+    public enum triggerStatus
+    {
+        None = 0,
+        Half = 1,
+        Full = 2,
+        Released = 3
+    }
     int delay;
     int speed;
     bool repeats;
@@ -39,7 +47,8 @@ class InputControl
         return ret;
     }
 
-    public bool triggers()
+    // For button calls
+    public bool button()
     {
         bool ret = (value != 0);
         if (repeats)
@@ -69,6 +78,58 @@ class InputControl
         else if (ret && triggered) return false;
         triggered = ret;
         return ret;
+    }
+
+    // For trigger calls
+    public triggerStatus trigger()
+    {
+        bool ret = (value > 1 && value < 240);
+        if (ret && !triggered)
+        {
+            if (countdownStart != 0)
+                ret = delay < DateTime.UtcNow.Ticks / 10000 - countdownStart;
+            else
+            {
+                ret = false;
+                countdownStart = DateTime.UtcNow.Ticks / 10000;
+            }
+            if (ret)
+            {
+                countdownStart = DateTime.UtcNow.Ticks / 10000;
+                return triggerStatus.Half;
+            }
+            return triggerStatus.None;
+        }
+        countdownStart = 0;
+        ret = value >= 240;
+        if (ret && triggered) return triggerStatus.None;
+        if (triggered && !ret)
+        {
+            triggered = false;
+            return triggerStatus.Released;
+        }
+        triggered = ret;
+        if (ret) return triggerStatus.Full;
+        return triggerStatus.None;
+    }
+
+    // For trigger calls
+    public int analogue()
+    {
+        int ret = value;
+        if (Math.Abs(value) < deadzone)
+        {
+            triggered = false;
+            return 0;
+        }
+        if (delay / (Math.Abs(value / deadzone)) < DateTime.UtcNow.Ticks / 10000 - countdownStart)
+        {
+            countdownStart = DateTime.UtcNow.Ticks / 10000;
+            ret /= Math.Abs(ret);
+            return ret;
+        }
+
+        return 0;
     }
 }
 
@@ -103,7 +164,7 @@ class GamepadInputManager
 
         if (value is GamepadButtonFlags)
             result = state.Gamepad.Buttons.HasFlag((GamepadButtonFlags)value) ? 1 : 0;
-        else if (value is short)
+        else
             result = Convert.ToInt32(value);
 
         if (stateFlags.ContainsKey(key))
@@ -128,18 +189,17 @@ class GamepadInputManager
         checkToAdd("DPadLeft", GamepadButtonFlags.DPadLeft, state, stateFlags);
         checkToAdd("DPadRight", GamepadButtonFlags.DPadRight, state, stateFlags);
         checkToAdd("DPadUp", GamepadButtonFlags.DPadUp, state, stateFlags);
-        checkToAdd("RightThumbX", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
-        checkToAdd("RightThumbY", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
-        checkToAdd("LeftThumbX", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
-        checkToAdd("LeftThumbY", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
-        checkToAdd("RightTrigger", state.Gamepad.RightThumbX, state, stateFlags, true);
-        checkToAdd("LeftTrigger", state.Gamepad.RightThumbX, state, stateFlags, true);
+        checkToAdd("RightThumbX", state.Gamepad.RightThumbX, state, stateFlags, true, 4000);
+        checkToAdd("RightThumbY", state.Gamepad.RightThumbY, state, stateFlags, true, 4000);
+        checkToAdd("LeftThumbX", state.Gamepad.LeftThumbX, state, stateFlags, true, 4000);
+        checkToAdd("LeftThumbY", state.Gamepad.LeftThumbY, state, stateFlags, true, 4000);
+        checkToAdd("RightTrigger", state.Gamepad.RightTrigger, state, stateFlags, true);
+        checkToAdd("LeftTrigger", state.Gamepad.LeftTrigger, state, stateFlags, true);
     }
 
     private static bool isPushed(string key, Dictionary<String, InputControl> stateFlags)
     {
-        bool ret = stateFlags[key].triggers() && !lastStateFlags[key].triggered;
-        if (ret) System.Diagnostics.Debug.WriteLine("Triggered at " + DateTime.UtcNow.Ticks.ToString());
+        bool ret = stateFlags[key].button() && !lastStateFlags[key].triggered;
         return ret;
     }
 
@@ -162,15 +222,36 @@ class GamepadInputManager
         switch (currentSubmenu)
         {
             case submenu.None:
-                if (stateFlags["A"].triggers()) KeyOutputManager.A_PRESS();
-                if (stateFlags["B"].triggers()) KeyOutputManager.B_PRESS();
-                if (stateFlags["X"].triggers()) KeyOutputManager.X_PRESS();
+                if (stateFlags["A"].button()) KeyOutputManager.A_PRESS();
+                if (stateFlags["B"].button()) KeyOutputManager.B_PRESS();
+                if (stateFlags["X"].button()) KeyOutputManager.X_PRESS();
                 if (isPushed("Y", stateFlags)) KeyOutputManager.Y_PRESS();
-                if (stateFlags["DPadDown"].triggers()) KeyOutputManager.DPAD_DOWN();
-                if (stateFlags["DPadLeft"].triggers()) KeyOutputManager.DPAD_LEFT();
-                if (stateFlags["DPadUp"].triggers()) KeyOutputManager.DPAD_UP();
-                if (stateFlags["DPadRight"].triggers()) KeyOutputManager.DPAD_RIGHT();
+                if (stateFlags["DPadDown"].button()) KeyOutputManager.DPAD_DOWN();
+                if (stateFlags["DPadLeft"].button()) KeyOutputManager.DPAD_LEFT();
+                if (stateFlags["DPadUp"].button()) KeyOutputManager.DPAD_UP();
+                if (stateFlags["DPadRight"].button()) KeyOutputManager.DPAD_RIGHT();
                 if (isPushed("Back", stateFlags)) KeyOutputManager.MENU_PRESS();
+                if (isPushed("RightThumb", stateFlags)) KeyOutputManager.RSTICK_PRESS();
+
+                InputControl.triggerStatus val = stateFlags["RightTrigger"].trigger();
+                if (val == InputControl.triggerStatus.Full)
+                {
+                    Debug.WriteLine("RT down");
+                    KeyOutputManager.RightTriggerDown();
+                }
+                else if (val == InputControl.triggerStatus.Half) KeyOutputManager.RightTriggerHalfHeld();
+                else if (val == InputControl.triggerStatus.Released) KeyOutputManager.RightTriggerUp();
+                val = stateFlags["LeftTrigger"].trigger();
+                if (val == InputControl.triggerStatus.Full) KeyOutputManager.LeftTriggerPress();
+                else if (val == InputControl.triggerStatus.Half) KeyOutputManager.LeftTriggerHalfHeld();
+
+                int Left = stateFlags["LeftThumbX"].analogue();
+                if (Left == 1) KeyOutputManager.DPAD_RIGHT();
+                else if (Left == -1) KeyOutputManager.DPAD_LEFT();
+                Left = stateFlags["LeftThumbY"].analogue();
+                if (Left == 1) KeyOutputManager.DPAD_UP();
+                else if (Left == -1) KeyOutputManager.DPAD_DOWN();
+
 
                 break;
             case submenu.Keyboard:

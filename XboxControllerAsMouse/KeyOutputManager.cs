@@ -77,7 +77,6 @@ public static class KeyOutputManager
     }
     public static void DPAD_UP()
     {
-        System.Diagnostics.Debug.WriteLine("DPAD UP");
         _keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.UP);
     }
     public static void DPAD_DOWN()

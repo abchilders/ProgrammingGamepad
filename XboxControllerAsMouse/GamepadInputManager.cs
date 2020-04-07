@@ -16,14 +16,18 @@ class InputControl
     long deadzone;
 
     public int value;
-    public bool triggered = false;
+    public bool triggered;
+    public bool startRepeat;
+
     public InputControl(int value, bool repeats = false, long deadzone = 0)
     {
         delay = 250 * (1 + System.Windows.Forms.SystemInformation.KeyboardDelay);
-        speed = 400 - (12*System.Windows.Forms.SystemInformation.KeyboardSpeed);
+        speed = 400 - (int)(11.8*System.Windows.Forms.SystemInformation.KeyboardSpeed);
         this.repeats = repeats;
         this.value = value;
         this.deadzone = deadzone;
+        triggered = false;
+        startRepeat = false;
     }
 
     public InputControl clone()
@@ -31,6 +35,7 @@ class InputControl
         InputControl ret = new InputControl(value, repeats, deadzone);
         ret.triggered = triggered;
         ret.countdownStart = countdownStart;
+        ret.startRepeat = startRepeat;
         return ret;
     }
 
@@ -41,11 +46,25 @@ class InputControl
         {
             if (ret)
             {
-                ret = (delay < DateTime.UtcNow.Ticks - countdownStart);
-                if (ret) countdownStart = DateTime.UtcNow.Ticks;
+                if (startRepeat)
+                    ret = speed < DateTime.UtcNow.Ticks / 10000 - countdownStart;
+                else
+                    ret = delay < DateTime.UtcNow.Ticks / 10000 - countdownStart;
+                if (ret)
+                {
+                    countdownStart = DateTime.UtcNow.Ticks / 10000;
+                    if (triggered)
+                       startRepeat = true;
+                }
+                else
+                    return false;
             }
             else
+            {
                 countdownStart = 0;
+                triggered = false;
+                startRepeat = false;
+            }
         }
         else if (ret && triggered) return false;
         triggered = ret;
@@ -143,14 +162,14 @@ class GamepadInputManager
         switch (currentSubmenu)
         {
             case submenu.None:
-                if (isPushed("A", stateFlags)) KeyOutputManager.A_PRESS();
-                if (isPushed("B", stateFlags)) KeyOutputManager.B_PRESS();
-                if (isPushed("X", stateFlags)) KeyOutputManager.X_PRESS();
+                if (stateFlags["A"].triggers()) KeyOutputManager.A_PRESS();
+                if (stateFlags["B"].triggers()) KeyOutputManager.B_PRESS();
+                if (stateFlags["X"].triggers()) KeyOutputManager.X_PRESS();
                 if (isPushed("Y", stateFlags)) KeyOutputManager.Y_PRESS();
-                if (isPushed("DPadDown", stateFlags)) KeyOutputManager.DPAD_DOWN();
-                if (isPushed("DPadLeft", stateFlags)) KeyOutputManager.DPAD_LEFT();
-                if (isPushed("DPadUp", stateFlags)) KeyOutputManager.DPAD_UP();
-                if (isPushed("DPadRight", stateFlags)) KeyOutputManager.DPAD_RIGHT();
+                if (stateFlags["DPadDown"].triggers()) KeyOutputManager.DPAD_DOWN();
+                if (stateFlags["DPadLeft"].triggers()) KeyOutputManager.DPAD_LEFT();
+                if (stateFlags["DPadUp"].triggers()) KeyOutputManager.DPAD_UP();
+                if (stateFlags["DPadRight"].triggers()) KeyOutputManager.DPAD_RIGHT();
                 if (isPushed("Back", stateFlags)) KeyOutputManager.MENU_PRESS();
 
                 break;

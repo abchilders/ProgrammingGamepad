@@ -5,6 +5,66 @@ using System.Text;
 using System.Threading.Tasks;
 using SharpDX.XInput;
 
+
+class InputControl
+{
+    int delay;
+    int speed;
+    bool repeats;
+    long countdownStart;
+
+    long deadzone;
+
+    public int value;
+    public bool triggered = false;
+    public InputControl(int value, bool repeats = false, long deadzone = 0)
+    {
+        delay = 250 * (1 + System.Windows.Forms.SystemInformation.KeyboardDelay);
+        speed = 400 - (12*System.Windows.Forms.SystemInformation.KeyboardSpeed);
+        this.repeats = repeats;
+        this.value = value;
+        this.deadzone = deadzone;
+    }
+
+    public InputControl clone()
+    {
+        InputControl ret = new InputControl(value, repeats, deadzone);
+        ret.triggered = triggered;
+        ret.countdownStart = countdownStart;
+        return ret;
+    }
+
+    public bool triggers()
+    {
+        bool ret = (value != 0);
+        if (repeats)
+        {
+            if (ret)
+            {
+                ret = (delay < DateTime.UtcNow.Ticks - countdownStart);
+                if (ret) countdownStart = DateTime.UtcNow.Ticks;
+            }
+            else
+                countdownStart = 0;
+        }
+        else if (ret && triggered) return false;
+        triggered = ret;
+        return ret;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 class GamepadInputManager
 {
     enum submenu
@@ -16,50 +76,83 @@ class GamepadInputManager
         Libraries = 4
     }
     private static submenu currentSubmenu = submenu.None;
-    private static Dictionary<String, int> lastStateFlags = new Dictionary<string, int>();
+    private static Dictionary<String, InputControl> lastStateFlags = new Dictionary<string, InputControl>();
 
-    private static void checkToAdd(string key, GamepadButtonFlags value, State state, Dictionary<String, int> stateFlags)
+    private static void checkToAdd(string key, Object value, State state, Dictionary<String, InputControl> stateFlags, bool repeats = true, long deadzone = 0)
     {
-        stateFlags.Add(key, state.Gamepad.Buttons.HasFlag(value) ? 1 : 0);
+        int result = 0;
+
+        if (value is GamepadButtonFlags)
+            result = state.Gamepad.Buttons.HasFlag((GamepadButtonFlags)value) ? 1 : 0;
+        else if (value is short)
+            result = Convert.ToInt32(value);
+
+        if (stateFlags.ContainsKey(key))
+            stateFlags[key].value = result;
+        else
+            stateFlags.Add(key, new InputControl(result, repeats, deadzone));
     }
 
-    private static void checkButtons(State state, Dictionary<String, int> stateFlags)
+    private static void checkStates(State state, Dictionary<String, InputControl> stateFlags)
     {
         checkToAdd("A", GamepadButtonFlags.A, state, stateFlags);
         checkToAdd("B", GamepadButtonFlags.B, state, stateFlags);
         checkToAdd("X", GamepadButtonFlags.X, state, stateFlags);
-        checkToAdd("Y", GamepadButtonFlags.Y, state, stateFlags);
-        checkToAdd("Back", GamepadButtonFlags.Back, state, stateFlags);
-        checkToAdd("Start", GamepadButtonFlags.Start, state, stateFlags);
-        checkToAdd("LeftShoulder", GamepadButtonFlags.LeftShoulder, state, stateFlags);
-        checkToAdd("RightShoulder", GamepadButtonFlags.RightShoulder, state, stateFlags);
-        checkToAdd("LeftThumb", GamepadButtonFlags.LeftThumb, state, stateFlags);
-        checkToAdd("RightThumb", GamepadButtonFlags.RightThumb, state, stateFlags);
+        checkToAdd("Y", GamepadButtonFlags.Y, state, stateFlags, false);
+        checkToAdd("Back", GamepadButtonFlags.Back, state, stateFlags, false);
+        checkToAdd("Start", GamepadButtonFlags.Start, state, stateFlags, false);
+        checkToAdd("LeftShoulder", GamepadButtonFlags.LeftShoulder, state, stateFlags, false);
+        checkToAdd("RightShoulder", GamepadButtonFlags.RightShoulder, state, stateFlags, false);
+        checkToAdd("LeftThumb", GamepadButtonFlags.LeftThumb, state, stateFlags, false);
+        checkToAdd("RightThumb", GamepadButtonFlags.RightThumb, state, stateFlags, false);
         checkToAdd("DPadDown", GamepadButtonFlags.DPadDown, state, stateFlags);
         checkToAdd("DPadLeft", GamepadButtonFlags.DPadLeft, state, stateFlags);
         checkToAdd("DPadRight", GamepadButtonFlags.DPadRight, state, stateFlags);
         checkToAdd("DPadUp", GamepadButtonFlags.DPadUp, state, stateFlags);
+        checkToAdd("RightThumbX", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
+        checkToAdd("RightThumbY", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
+        checkToAdd("LeftThumbX", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
+        checkToAdd("LeftThumbY", state.Gamepad.RightThumbX, state, stateFlags, true, 100);
+        checkToAdd("RightTrigger", state.Gamepad.RightThumbX, state, stateFlags, true);
+        checkToAdd("LeftTrigger", state.Gamepad.RightThumbX, state, stateFlags, true);
     }
 
-    private static void checkThumbs(State state, Dictionary<String, int> stateFlags)
+    private static bool isPushed(string key, Dictionary<String, InputControl> stateFlags)
     {
-        stateFlags.Add("RightThumbX", state.Gamepad.RightThumbX);
-        stateFlags.Add("LeftThumbX", state.Gamepad.LeftThumbX);
-        stateFlags.Add("RightThumbY", state.Gamepad.RightThumbY);
-        stateFlags.Add("LeftThumbY", state.Gamepad.LeftThumbY);
-        stateFlags.Add("RightTrigger", state.Gamepad.RightTrigger);
-        stateFlags.Add("LeftTrigger", state.Gamepad.LeftTrigger);
+        bool ret = stateFlags[key].triggers() && !lastStateFlags[key].triggered;
+        if (ret) System.Diagnostics.Debug.WriteLine("Triggered at " + DateTime.UtcNow.Ticks.ToString());
+        return ret;
+    }
+
+    private static Dictionary<String, InputControl> deepCopy()
+    {
+        Dictionary<String, InputControl> stateFlags = new Dictionary<string, InputControl>();
+        if (lastStateFlags != null)
+            foreach(string key in lastStateFlags.Keys)
+            {
+                stateFlags.Add(key, lastStateFlags[key].clone());
+            }
+        return stateFlags;
     }
 
     public static void Update(State state)
     {
-        Dictionary<String, int> stateFlags = new Dictionary<string, int>();
-        checkButtons(state, stateFlags);
-        checkThumbs(state, stateFlags);
+        Dictionary<String, InputControl> stateFlags  = deepCopy();
+        checkStates(state, stateFlags);
 
         switch (currentSubmenu)
         {
             case submenu.None:
+                if (isPushed("A", stateFlags)) KeyOutputManager.A_PRESS();
+                if (isPushed("B", stateFlags)) KeyOutputManager.B_PRESS();
+                if (isPushed("X", stateFlags)) KeyOutputManager.X_PRESS();
+                if (isPushed("Y", stateFlags)) KeyOutputManager.Y_PRESS();
+                if (isPushed("DPadDown", stateFlags)) KeyOutputManager.DPAD_DOWN();
+                if (isPushed("DPadLeft", stateFlags)) KeyOutputManager.DPAD_LEFT();
+                if (isPushed("DPadUp", stateFlags)) KeyOutputManager.DPAD_UP();
+                if (isPushed("DPadRight", stateFlags)) KeyOutputManager.DPAD_RIGHT();
+                if (isPushed("Back", stateFlags)) KeyOutputManager.MENU_PRESS();
+
                 break;
             case submenu.Keyboard:
                 break;

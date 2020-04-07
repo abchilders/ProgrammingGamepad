@@ -4,7 +4,7 @@ public static class KeyOutputManager
 {
     private static IKeyboardSimulator _keyboard = new InputSimulator().Keyboard;
     /** REQUIRED:
-        * View -> Open Keyboard -> Sub inputs
+        * Start -> Open Keyboard -> Sub inputs
     X + RSTICK Press -> Period
         * RSTICK Move -> Submenu Navigation (Libraries)
         * Right bumper/left bumper -> Select premade variables
@@ -22,8 +22,10 @@ public static class KeyOutputManager
     X + Right Trigger Half 1 second -> Paste
         * 
         */
-
-
+    public static void MENU_PRESS()
+    {
+        _keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.MENU);
+    }
 
     public static void RightTriggerHalfHeld()
     {
@@ -73,12 +75,9 @@ public static class KeyOutputManager
     {
         _keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.BACK);
     }
-    public static void MENU_PRESS()
-    {
-        _keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.MENU);
-    }
     public static void DPAD_UP()
     {
+        System.Diagnostics.Debug.WriteLine("DPAD UP");
         _keyboard.KeyPress(WindowsInput.Native.VirtualKeyCode.UP);
     }
     public static void DPAD_DOWN()
